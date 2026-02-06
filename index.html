@@ -67,6 +67,16 @@
         <!-- Top Header -->
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div class="flex flex-col gap-1">
+                <!-- Sheet ID Input Form -->
+                <div id="sheet-input-section" class="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4" style="display: none;">
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Google Sheet ID (Optional)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="sheet-id-input" placeholder="Paste Sheet ID dari URL Google Sheets..." class="flex-1 px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button onclick="loadCustomSheet()" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all">Load</button>
+                        <button onclick="toggleSheetInput()" class="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm hover:bg-slate-300 transition-all">Batal</button>
+                    </div>
+                </div>
+                
                 <div class="flex items-center gap-3">
                     <h2 id="page-title" class="text-2xl font-bold text-slate-800 leading-none">Dashboard</h2>
                     <select id="sheet-selector" onchange="changeSheet(this.value)" class="bg-blue-50 text-blue-600 font-bold text-xs px-3 py-1.5 rounded-lg border border-blue-100 outline-none hover:bg-blue-100 transition-all cursor-pointer">
@@ -79,6 +89,10 @@
                 <button onclick="fetchSheetData()" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all shadow-sm">
                     <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     <span class="text-sm font-semibold text-slate-600">Sync Now</span>
+                </button>
+                <button onclick="toggleSheetInput()" class="flex items-center gap-2 px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl hover:bg-slate-150 transition-all shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    <span class="text-sm font-semibold text-slate-600">Change Sheet</span>
                 </button>
             </div>
         </header>
@@ -187,12 +201,12 @@
 
     <script>
         // Settings with Multi-Sheet Support
-        const DEFAULT_SID = '1GdoK0s7vMBVx42khSam-LzaWxlmJKoz2OZ-8TBGWva0'; // Updated to your URL
+        const DEFAULT_SID = ''; // No default Sheet ID - user must input manually
         const DEFAULT_SHEETS = '5';
 
         let SPREADSHEET_ID = localStorage.getItem('ifp_sid') || DEFAULT_SID;
-        let SHEET_LIST = (localStorage.getItem('ifp_sheets') || DEFAULT_SHEETS).split(',').map(s => s.trim());
-        let CURRENT_SHEET = SHEET_LIST[0];
+        let SHEET_LIST = SPREADSHEET_ID ? (localStorage.getItem('ifp_sheets') || DEFAULT_SHEETS).split(',').map(s => s.trim()) : [];
+        let CURRENT_SHEET = SHEET_LIST.length > 0 ? SHEET_LIST[0] : null;
 
         let masterData = [];
         let installedData = [];
@@ -433,9 +447,52 @@
             log.prepend(div);
         }
 
-        window.onload = () => {
+        function toggleSheetInput() {
+            const section = document.getElementById('sheet-input-section');
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                document.getElementById('sheet-id-input').focus();
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
+        function loadCustomSheet() {
+            const newSheetId = document.getElementById('sheet-id-input').value.trim();
+            
+            if (!newSheetId) {
+                alert('Mohon masukkan Sheet ID');
+                return;
+            }
+            
+            // Extract Sheet ID from Google Sheets URL if user pasted full URL
+            let extractedId = newSheetId;
+            const urlMatch = newSheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (urlMatch) {
+                extractedId = urlMatch[1];
+            }
+            
+            SPREADSHEET_ID = extractedId;
+            localStorage.setItem('ifp_sid', extractedId);
+            
+            logActivity(`Sheet ID changed: ${extractedId.substring(0, 10)}...`, 'info');
+            toggleSheetInput();
+            
+            // Reset and reload
+            SHEET_LIST = DEFAULT_SHEETS.split(',').map(s => s.trim());
+            CURRENT_SHEET = SHEET_LIST[0];
             updateSheetSelectorUI();
             fetchSheetData();
+        }
+
+        window.onload = () => {
+            if (!SPREADSHEET_ID) {
+                logActivity('Mohon input Google Sheet ID untuk memulai', 'info');
+                toggleSheetInput();
+            } else {
+                updateSheetSelectorUI();
+                fetchSheetData();
+            }
             switchTab('overview');
         };
     </script>
