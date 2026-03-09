@@ -1,6 +1,5 @@
 import { memo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 
 export const RawDataViewer = memo(function RawDataViewer() {
   const { data } = useApp();
