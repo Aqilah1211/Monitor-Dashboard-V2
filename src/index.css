@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { @apply font-sans text-slate-800 bg-slate-50; }
+}
+@layer components {
+  .glass-card { @apply bg-white/90 backdrop-blur-sm border border-slate-200/80; }
+  .sidebar-item-active { @apply bg-blue-50 text-blue-600 border-r-4 border-blue-600; }
+}
+@layer utilities {
+  .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
