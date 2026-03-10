@@ -13,5 +13,6 @@ export * from './dashboard/ProgressChart';
 export * from './dashboard/ActivityLog';
 export * from './dashboard/LastUpdated';
 export { default as LoadingSkeleton } from './dashboard/LoadingSkeleton';
+export { default as ProvinceStatistics } from './dashboard/ProvinceStatistics';
 export * from './tables/DataTable';
 export * from './debug/RawDataViewer';

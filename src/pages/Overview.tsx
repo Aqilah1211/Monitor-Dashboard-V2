@@ -4,7 +4,7 @@ import { RotateCcw } from 'lucide-react';
 import { ProgressChart } from '../components/dashboard/ProgressChart';
 import { ActivityLog } from '../components/dashboard/ActivityLog';
 import { LastUpdated } from '../components/dashboard/LastUpdated';
-import { LoadingSkeleton, RawDataViewer } from '../components';
+import { LoadingSkeleton, RawDataViewer, ProvinceStatistics } from '../components';
 import {
   DatePicker,
   ProvinceFilter,
@@ -128,6 +128,16 @@ export function Overview() {
       endDate: new Date(),
     });
     setSelectedProvince('Semua Provinsi');
+  };
+
+  // Handle province selection from chart
+  const handleProvinceSelect = (province: string) => {
+    setSelectedProvince(province);
+    // Optional: scroll to statistics section
+    const statsElement = document.querySelector('[data-section="statistics"]');
+    if (statsElement) {
+      statsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   // Tampilkan loading skeleton saat data sedang di-fetch
@@ -301,6 +311,12 @@ export function Overview() {
           <ActivityLog />
         </>
       )}
+
+      {/* Province Statistics Chart */}
+      <ProvinceStatistics
+        data={provinceStats}
+        onProvinceSelect={handleProvinceSelect}
+      />
 
       {/* Top Province Info */}
       {topProvince && (
