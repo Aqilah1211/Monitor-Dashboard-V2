@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { GoogleSheets } from '../lib/google-sheets';
 import { diagnosticCheckSpreadsheet, generateDiagnosticsReport } from '../lib/googleSheetsDiagnostics';
+import { logger } from '../utils/logger';
 
 export function Settings() {
   const { config, saveConfig, addLog } = useApp();
@@ -49,6 +50,7 @@ export function Settings() {
         status: 'error',
         message: '❌ Masukkan Spreadsheet ID terlebih dahulu',
       });
+      logger.warn('Test connection failed: empty spreadsheet ID', {}, 'Settings');
       return;
     }
 
@@ -58,6 +60,7 @@ export function Settings() {
         status: 'error',
         message: validation.message,
       });
+      logger.warn(`Test connection failed: invalid ID format - ${validation.message}`, {}, 'Settings');
       return;
     }
 
@@ -75,12 +78,13 @@ export function Settings() {
         throw new Error('Masukkan minimal 1 nama sheet');
       }
 
+      logger.info(`🧪 Starting diagnostics test`, { spreadsheetId: cleanedSid, sheet: sheetList[0] }, 'Settings');
+
       // Run diagnostic check
-      console.log('🧪 Starting diagnostics for:', cleanedSid, sheetList[0]);
       const diagnosticResult = await diagnosticCheckSpreadsheet(cleanedSid, sheetList[0]);
       const report = generateDiagnosticsReport(diagnosticResult);
       
-      console.log(report);
+      logger.debug('Diagnostics report generated', { diagnosticResult, report }, 'Settings');
 
       // Determine status
       if (diagnosticResult.errors.length > 0) {
@@ -88,22 +92,27 @@ export function Settings() {
           status: 'error',
           message: diagnosticResult.errors[0], // Show first error
         });
+        logger.error(`Spreadsheet test failed: ${diagnosticResult.errors[0]}`, { errors: diagnosticResult.errors }, 'Settings');
       } else if (diagnosticResult.warnings.length > 0) {
         setTestResult({
           status: 'success',
           message: `✅ Spreadsheet berhasil diakses! Ditemukan ${diagnosticResult.rowCount} baris data.\n\n⚠️ Perhatian: ${diagnosticResult.warnings[0]}`,
         });
+        logger.warn(`Spreadsheet test warning: ${diagnosticResult.warnings[0]}`, { warnings: diagnosticResult.warnings }, 'Settings');
+        addLog(`✅ Spreadsheet ${cleanedSid.substring(0, 8)}... berhasil diuji (dengan warning)`, 'success');
       } else if (diagnosticResult.accessible && diagnosticResult.hasData) {
         setTestResult({
           status: 'success',
           message: `✅ Spreadsheet berhasil diakses!\n📊 Data ditemukan: ${diagnosticResult.rowCount} baris, ${diagnosticResult.columnCount} kolom.`,
         });
+        logger.info(`✅ Spreadsheet test successful`, { rowCount: diagnosticResult.rowCount, columnCount: diagnosticResult.columnCount }, 'Settings');
         addLog(`✅ Spreadsheet ${cleanedSid.substring(0, 8)}... berhasil diuji`, 'success');
       } else if (diagnosticResult.accessible && !diagnosticResult.hasData) {
         setTestResult({
           status: 'error',
           message: `⚠️ Spreadsheet accessible tapi tidak ada data.\nMungkin sheet "${sheetList[0]}" kosong atau nama sheet salah.`,
         });
+        logger.warn(`Spreadsheet has no data`, { sheet: sheetList[0] }, 'Settings');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error tidak diketahui';
@@ -111,7 +120,7 @@ export function Settings() {
         status: 'error',
         message: errorMsg,
       });
-      console.error('❌ Test failed:', errorMsg);
+      logger.error('Test connection failed with exception', { error: errorMsg }, 'Settings');
     } finally {
       setTestLoading(false);
     }
@@ -126,6 +135,7 @@ export function Settings() {
         status: 'error',
         message: '❌ Data tidak boleh kosong!',
       });
+      logger.warn('Save failed: empty fields', {}, 'Settings');
       return;
     }
 
@@ -135,6 +145,7 @@ export function Settings() {
         status: 'error',
         message: validation.message,
       });
+      logger.warn(`Save failed: invalid spreadsheet ID - ${validation.message}`, {}, 'Settings');
       return;
     }
 
@@ -145,9 +156,7 @@ export function Settings() {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    console.log('📝 Saving config - Original SID:', sid);
-    console.log('📝 Saving config - Cleaned SID:', cleanedSid);
-    console.log('📝 Saving config - Sheet List:', sheetList);
+    logger.info('Saving configuration', { originalSid: sid, cleanedSid, sheetList }, 'Settings');
 
     saveConfig({ spreadsheetId: cleanedSid, sheetList, currentSheet: sheetList[0] });
     setTestResult({
