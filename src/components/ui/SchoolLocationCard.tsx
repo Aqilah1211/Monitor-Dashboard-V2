@@ -1,5 +1,5 @@
 import { MapPin, Building2, Map } from 'lucide-react';
-import { getSchoolLocation } from '@/utils/schoolLocationUtils';
+import { getSchoolLocation } from '@/data/schoolLocations';
 
 interface SchoolLocationCardProps {
   schoolName: string;

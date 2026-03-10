@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { MapPin } from 'lucide-react';
-import {
-  getSchoolLocation,
-  extractProvinceFromSchoolName,
-} from '@/utils/schoolLocationUtils';
+import { getSchoolLocation } from '@/data/schoolLocations';
+import { extractProvinceFromSchoolName } from '@/utils/schoolLocationUtils';
 
 interface SchoolLocationBadgeProps {
   schoolName: string;

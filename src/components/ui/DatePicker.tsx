@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Calendar } from 'lucide-react';
-import { format, addDays, startOfMonth, endOfMonth, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 
 interface DatePickerProps {

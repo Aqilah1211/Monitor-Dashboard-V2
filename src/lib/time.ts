@@ -13,10 +13,8 @@ export function formatTimestamp(date: Date | null, includeDate: boolean = false)
 
   if (!includeDate) return time;
 
-  const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   
-  const dayName = days[date.getDay()];
   const day = String(date.getDate()).padStart(2, '0');
   const month = months[date.getMonth()];
   const year = date.getFullYear();
