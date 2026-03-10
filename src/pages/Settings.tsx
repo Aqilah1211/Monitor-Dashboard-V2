@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader, Info } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { GoogleSheets } from '../lib/google-sheets';
+import { diagnosticCheckSpreadsheet, generateDiagnosticsReport } from '../lib/googleSheetsDiagnostics';
 
 export function Settings() {
   const { config, saveConfig, addLog } = useApp();
@@ -40,7 +41,7 @@ export function Settings() {
   };
 
   /**
-   * Test apakah spreadsheet bisa diakses
+   * Test apakah spreadsheet bisa diakses dengan diagnostics
    */
   const handleTestConnection = async () => {
     if (!sid.trim()) {
@@ -61,7 +62,7 @@ export function Settings() {
     }
 
     setTestLoading(true);
-    setTestResult({ status: 'idle', message: 'Menguji koneksi...' });
+    setTestResult({ status: 'idle', message: 'Menjalankan diagnostics...' });
 
     try {
       const cleanedSid = GoogleSheets.cleanSpreadsheetId(sid);
@@ -74,26 +75,35 @@ export function Settings() {
         throw new Error('Masukkan minimal 1 nama sheet');
       }
 
-      // Try fetch dari sheet pertama
-      const url = GoogleSheets.buildCSVUrl(cleanedSid, sheetList[0]);
-      console.log('🧪 Testing URL:', url);
+      // Run diagnostic check
+      console.log('🧪 Starting diagnostics for:', cleanedSid, sheetList[0]);
+      const diagnosticResult = await diagnosticCheckSpreadsheet(cleanedSid, sheetList[0]);
+      const report = generateDiagnosticsReport(diagnosticResult);
       
-      const response = await fetch(url, { method: 'HEAD' });
-      
-      if (response.ok || response.status === 200) {
+      console.log(report);
+
+      // Determine status
+      if (diagnosticResult.errors.length > 0) {
+        setTestResult({
+          status: 'error',
+          message: diagnosticResult.errors[0], // Show first error
+        });
+      } else if (diagnosticResult.warnings.length > 0) {
         setTestResult({
           status: 'success',
-          message: `✅ Spreadsheet berhasil diakses! Sheet "${sheetList[0]}" ditemukan.`,
+          message: `✅ Spreadsheet berhasil diakses! Ditemukan ${diagnosticResult.rowCount} baris data.\n\n⚠️ Perhatian: ${diagnosticResult.warnings[0]}`,
+        });
+      } else if (diagnosticResult.accessible && diagnosticResult.hasData) {
+        setTestResult({
+          status: 'success',
+          message: `✅ Spreadsheet berhasil diakses!\n📊 Data ditemukan: ${diagnosticResult.rowCount} baris, ${diagnosticResult.columnCount} kolom.`,
         });
         addLog(`✅ Spreadsheet ${cleanedSid.substring(0, 8)}... berhasil diuji`, 'success');
-      } else if (response.status === 404) {
-        throw new Error(
-          `❌ Spreadsheet tidak ditemukan (404). Pastikan:\n1. ID Spreadsheet benar\n2. Spreadsheet dibuat public (Share > Anyone)\n3. Sheet "${sheetList[0]}" ada`
-        );
-      } else {
-        throw new Error(
-          `❌ Error ${response.status}: ${response.statusText}. Cek apakah spreadsheet accessible.`
-        );
+      } else if (diagnosticResult.accessible && !diagnosticResult.hasData) {
+        setTestResult({
+          status: 'error',
+          message: `⚠️ Spreadsheet accessible tapi tidak ada data.\nMungkin sheet "${sheetList[0]}" kosong atau nama sheet salah.`,
+        });
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error tidak diketahui';
@@ -265,15 +275,55 @@ export function Settings() {
         </div>
 
         {/* Info Box */}
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-          <h4 className="font-semibold text-blue-900 text-sm mb-2">ℹ️ Cara menggunakan:</h4>
-          <ul className="text-xs text-blue-800 space-y-1">
-            <li>✓ Copy Spreadsheet ID dari URL spreadsheet</li>
-            <li>✓ Pastikan spreadsheet dibuat <strong>Public</strong> (Share &gt; Anyone)</li>
-            <li>✓ Masukkan nama sheet yang ingin dimonitor</li>
-            <li>✓ Klik "Tes Koneksi" untuk verifikasi sebelum simpan</li>
-            <li>✓ Jika error 404, periksa ID dan akses public spreadsheet</li>
-          </ul>
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg space-y-3">
+          <h4 className="font-semibold text-blue-900 text-sm flex items-center gap-2">
+            <Info size={16} /> Panduan Setup:
+          </h4>
+          <ol className="text-xs text-blue-800 space-y-2 list-decimal list-inside">
+            <li><strong>Copy Spreadsheet ID</strong> dari URL: https://docs.google.com/spreadsheets/d/<strong>[ID_DISINI]</strong>/edit</li>
+            <li><strong>Share Spreadsheet</strong> → Buka Share button → <strong>Ubah ke "Anyone with the link"</strong></li>
+            <li><strong>Masukkan ID & Sheet Name</strong> di form di atas</li>
+            <li><strong>Klik "🧪 Tes Koneksi"</strong> untuk verifikasi sebelum simpan</li>
+          </ol>
+        </div>
+
+        {/* Troubleshooting Box */}
+        <div className="bg-red-50 border border-red-200 p-4 rounded-lg space-y-3">
+          <h4 className="font-semibold text-red-900 text-sm">🔧 Troubleshooting Jika Masih Error 404:</h4>
+          <div className="text-xs text-red-800 space-y-2">
+            <div>
+              <strong>❌ Error: "404 Not Found"</strong>
+              <p className="mt-1 ml-2">Kemungkinan penyebab:</p>
+              <ul className="list-disc list-inside ml-2 mt-1">
+                <li>Spreadsheet ID salah (copy ulang dari URL)</li>
+                <li>Spreadsheet tidak di-share ke "Anyone" (PENTING!)</li>
+                <li>Nama sheet tidak sesuai (cek tab name di spreadsheet)</li>
+                <li>Spreadsheet dihapus atau tidak accessible</li>
+              </ul>
+            </div>
+            
+            <div className="mt-3">
+              <strong>❌ Error: "403 Forbidden"</strong>
+              <p className="mt-1 ml-2">Solusi:</p>
+              <ul className="list-disc list-inside ml-2 mt-1">
+                <li>Buka Spreadsheet di browser</li>
+                <li>Klik tombol <strong>Share</strong> (kanan atas)</li>
+                <li>Ubah akses menjadi <strong>"Anyone with the link"</strong> atau <strong>"Public"</strong></li>
+                <li>Copy link dan ambil ID dari URL</li>
+              </ul>
+            </div>
+
+            <div className="mt-3">
+              <strong>❌ Error: "Network error"</strong>
+              <p className="mt-1 ml-2">Solusi:</p>
+              <ul className="list-disc list-inside ml-2 mt-1">
+                <li>Pastikan internet connection aktif</li>
+                <li>Coba refresh page (Ctrl+R)</li>
+                <li>Cek apakah browser blok akses ke Google Sheets</li>
+                <li>Buka console (F12) untuk melihat error detail</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
