@@ -1,5 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 interface HealthCheckResponse {
   status: 'healthy' | 'degraded' | 'unhealthy';
   timestamp: string;
@@ -21,8 +19,8 @@ interface HealthCheckResponse {
  * Gunakan untuk monitoring status aplikasi
  */
 export default async function handler(
-  request: VercelRequest,
-  response: VercelResponse<HealthCheckResponse>
+  request: { query: Record<string, string | string[]> },
+  response: { status: (code: number) => { json: (data: HealthCheckResponse) => void } }
 ): Promise<void> {
   const startTime = Date.now();
   const checks: HealthCheckResponse['checks'] = [];
@@ -44,9 +42,15 @@ export default async function handler(
     try {
       const sheetsUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 
+      // Use AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const sheetsResponse = await fetch(sheetsUrl, {
-        timeout: 10000
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (sheetsResponse.ok) {
         const data = await sheetsResponse.text();
