@@ -4,13 +4,14 @@ import { RotateCcw, RefreshCw } from 'lucide-react';
 import { ProgressChart } from '../components/dashboard/ProgressChart';
 import { ActivityLog } from '../components/dashboard/ActivityLog';
 import { LastUpdated } from '../components/dashboard/LastUpdated';
-import { LoadingSkeleton, RawDataViewer, ProvinceStatistics } from '../components';
+import { LoadingSkeleton, RawDataViewer, ProvinceStatistics, DateFilterControl, DateSummaryStats } from '../components';
 import {
   DatePicker,
   ProvinceFilter,
   DateRangeDisplay,
   EmptyState,
 } from '../components';
+import { DateFilterProvider } from '../context/DateFilterContext';
 import { useApp } from '../context/AppContext';
 import { SchoolData } from '../types';
 import { getProvinceStatistics } from '../utils/schoolLocationUtils';
@@ -194,6 +195,38 @@ export function Overview() {
     }
   };
 
+  // Mock data untuk testing DateSummaryStats
+  // Format: { id, name, date, status }
+  const mockSummaryData = data?.all?.map((item: SchoolData) => {
+    let status: 'terpasang' | 'pending' | 'problem' | 'proses' = 'pending';
+    
+    if (item.status.toLowerCase().includes('selesai')) {
+      status = 'terpasang';
+    } else if (item.kendala && item.kendala.length > 2) {
+      status = 'problem';
+    } else if (item.status.toLowerCase().includes('proses')) {
+      status = 'proses';
+    }
+
+    return {
+      id: item.npsn,
+      name: item.nama,
+      date: new Date(item.tanggal),
+      status: status,
+    };
+  }) || [];
+
+  // Debug: Log tanggal setiap kali date filter berubah
+  useEffect(() => {
+    console.log('📅 Date Filter Changed:', {
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+      selectedProvince,
+      filteredCount: filteredData.length,
+      timestamp: new Date().toLocaleTimeString('id-ID'),
+    });
+  }, [dateRange, selectedProvince]);
+
   // Tampilkan loading skeleton saat data sedang di-fetch atau state loading aktif
   if (isLoading || dashboardState.loading || !data) {
     return <LoadingSkeleton />;
@@ -209,45 +242,57 @@ export function Overview() {
     : 'Tidak ada data';
 
   return (
-    <div className="space-y-6">
-      {/* Error Alert */}
-      {dashboardState.error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-800 font-medium">⚠️ {dashboardState.error}</p>
-        </div>
-      )}
+    <DateFilterProvider>
+      <div className="space-y-6">
+        {/* Error Alert */}
+        {dashboardState.error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-800 font-medium">⚠️ {dashboardState.error}</p>
+          </div>
+        )}
 
-      {/* Header dengan Title, Last Updated dan Refresh Button */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">📊 Dashboard</h1>
-          <div className="space-y-1 mt-2">
-            <p className="text-slate-600 text-sm">
-              Total {data.all.length} sekolah dipantau
-            </p>
-            <p className="text-xs text-slate-500">
-              ⏱️ Terakhir diperbarui:{' '}
-              <span className="font-mono font-semibold">{lastUpdatedTime}</span>
-            </p>
+        {/* Header dengan Title, Last Updated dan Refresh Button */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">📊 Dashboard</h1>
+            <div className="space-y-1 mt-2">
+              <p className="text-slate-600 text-sm">
+                Total {data.all.length} sekolah dipantau
+              </p>
+              <p className="text-xs text-slate-500">
+                ⏱️ Terakhir diperbarui:{' '}
+                <span className="font-mono font-semibold">{lastUpdatedTime}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={dashboardState.loading}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-500 text-white rounded-lg transition-colors font-medium text-sm"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${
+                  dashboardState.loading ? 'animate-spin' : ''
+                }`}
+              />
+              Refresh
+            </button>
+            <LastUpdated />
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRefresh}
-            disabled={dashboardState.loading}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-500 text-white rounded-lg transition-colors font-medium text-sm"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${
-                dashboardState.loading ? 'animate-spin' : ''
-              }`}
-            />
-            Refresh
-          </button>
-          <LastUpdated />
+        {/* New Date Filter Control Section */}
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">
+            ⏳ Filter Tanggal Dashboard
+          </h3>
+          <DateFilterControl />
         </div>
-      </div>
+
+        {/* Date Summary Stats */}
+        <DateSummaryStats data={mockSummaryData} />
 
       {/* Date Range Display */}
       {isFilterActive && (
@@ -443,6 +488,7 @@ export function Overview() {
 
       {/* Debug */}
       <RawDataViewer />
-    </div>
+      </div>
+    </DateFilterProvider>
   );
 }
