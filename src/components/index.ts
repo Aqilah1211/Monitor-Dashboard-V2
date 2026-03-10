@@ -1,4 +1,6 @@
 export * from './ui/Card';
+export { default as EmptyState } from './ui/EmptyState';
+export { default as DatePicker } from './ui/DatePicker';
 export * from './layout/Sidebar';
 export * from './layout/Header';
 export * from './layout/Layout';
