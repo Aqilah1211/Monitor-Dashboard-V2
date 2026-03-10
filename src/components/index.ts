@@ -1,15 +1,10 @@
 export * from './ui/Card';
 export { default as EmptyState } from './ui/EmptyState';
-export { default as DatePicker } from './ui/DatePicker';
-export { default as DateRangeDisplay } from './ui/DateRangeDisplay';
-export { default as DateFilterControl } from './ui/DateFilterControl';
-export { default as ProvinceFilter } from './ui/ProvinceFilter';
 export { default as SchoolLocationBadge } from './ui/SchoolLocationBadge';
 export { default as SchoolLocationCard } from './ui/SchoolLocationCard';
 export * from './layout/Sidebar';
 export * from './layout/Header';
 export * from './layout/Layout';
-export * from './dashboard/StatsGrid';
 export * from './dashboard/ProgressChart';
 export * from './dashboard/ActivityLog';
 export * from './dashboard/LastUpdated';

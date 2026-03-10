@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
-import { RotateCcw, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { ProgressChart } from '../components/dashboard/ProgressChart';
 import { ActivityLog } from '../components/dashboard/ActivityLog';
 import { LastUpdated } from '../components/dashboard/LastUpdated';
-import { LoadingSkeleton, RawDataViewer, ProvinceStatistics, DateFilterControl, DateSummaryStats } from '../components';
+import { UnifiedFilter } from '../components/dashboard/UnifiedFilter';
+import { LoadingSkeleton, RawDataViewer, ProvinceStatistics, DateSummaryStats } from '../components';
 import {
-  DatePicker,
-  ProvinceFilter,
-  DateRangeDisplay,
   EmptyState,
 } from '../components';
 import { DateFilterProvider } from '../context/DateFilterContext';
@@ -44,12 +42,13 @@ export function Overview() {
     error: null,
   });
 
-  // Filter states
-  const [dateRange, setDateRange] = useState<DateRange>({
+  // Filter states - Legacy states (kept for backward compatibility)
+  // Note: UnifiedFilter manages filters independently via its own hook
+  const [dateRange] = useState<DateRange>({
     startDate: new Date(),
     endDate: new Date(),
   });
-  const [selectedProvince, setSelectedProvince] = useState('Semua Provinsi');
+  const [selectedProvince] = useState('Semua Provinsi');
   const [filteredData, setFilteredData] = useState<SchoolData[]>([]);
   const [filteredStats, setFilteredStats] = useState<FilteredStats>({
     total: 0,
@@ -176,18 +175,9 @@ export function Overview() {
     });
   }, [data, dateRange, selectedProvince]);
 
-  // Handle reset filters
-  const handleResetFilters = () => {
-    setDateRange({
-      startDate: new Date(),
-      endDate: new Date(),
-    });
-    setSelectedProvince('Semua Provinsi');
-  };
-
   // Handle province selection from chart
-  const handleProvinceSelect = (province: string) => {
-    setSelectedProvince(province);
+  const handleProvinceSelect = (_province: string) => {
+    // Note: Province filtering is now handled by UnifiedFilter component
     // Optional: scroll to statistics section
     const statsElement = document.querySelector('[data-section="statistics"]');
     if (statsElement) {
@@ -283,61 +273,22 @@ export function Overview() {
           </div>
         </div>
 
-        {/* New Date Filter Control Section */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">
-            ⏳ Filter Tanggal Dashboard
-          </h3>
-          <DateFilterControl />
-        </div>
+        {/* Unified Filter Component */}
+        <UnifiedFilter />
 
         {/* Date Summary Stats */}
         <DateSummaryStats data={mockSummaryData} />
 
-      {/* Date Range Display */}
-      {isFilterActive && (
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <DateRangeDisplay
-              startDate={dateRange.startDate}
-              endDate={dateRange.endDate}
-            />
-            <button
-              onClick={handleResetFilters}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium text-sm"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset Filter
-            </button>
+        {/* Filter Active Indicator */}
+        {isFilterActive && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-800">
+              📊 Menampilkan{' '}
+              <span className="font-bold">{filteredData.length}</span> dari{' '}
+              <span className="font-bold">{data.all.length}</span> sekolah
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* Filter Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <DatePicker
-          onChange={(dates) => setDateRange(dates)}
-          initialStartDate={dateRange.startDate}
-          initialEndDate={dateRange.endDate}
-          label="Rentang Tanggal"
-        />
-        <ProvinceFilter
-          onChange={(province) => setSelectedProvince(province)}
-          defaultValue={selectedProvince}
-          label="Filter Provinsi"
-        />
-      </div>
-
-      {/* Filter Active Indicator */}
-      {isFilterActive && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-sm text-amber-800">
-            📊 Menampilkan{' '}
-            <span className="font-bold">{filteredData.length}</span> dari{' '}
-            <span className="font-bold">{data.all.length}</span> sekolah
-          </p>
-        </div>
-      )}
+        )}
 
       {/* Statistics Grid - Show EmptyState jika tidak ada data */}
       {filteredData.length > 0 ? (
