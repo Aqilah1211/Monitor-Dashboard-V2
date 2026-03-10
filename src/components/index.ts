@@ -5,5 +5,7 @@ export * from './layout/Layout';
 export * from './dashboard/StatsGrid';
 export * from './dashboard/ProgressChart';
 export * from './dashboard/ActivityLog';
+export * from './dashboard/LastUpdated';
+export { default as LoadingSkeleton } from './dashboard/LoadingSkeleton';
 export * from './tables/DataTable';
 export * from './debug/RawDataViewer';
