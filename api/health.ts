@@ -19,7 +19,10 @@ interface HealthCheckResponse {
  * Gunakan untuk monitoring status aplikasi
  */
 export default async function handler(
-  request: { query: Record<string, string | string[]> },
+  request: { 
+    query: Record<string, string | string[]>;
+    headers?: Record<string, string>;
+  },
   response: { status: (code: number) => { json: (data: HealthCheckResponse) => void } }
 ): Promise<void> {
   const startTime = Date.now();
@@ -110,7 +113,7 @@ export default async function handler(
   const result: HealthCheckResponse = {
     status: healthStatus,
     timestamp: new Date().toISOString(),
-    environment: request.headers['x-forwarded-host'] || 'unknown',
+    environment: request.headers?.['x-forwarded-host'] || 'unknown',
     services: {
       api: 'ok',
       googleSheets: googleSheetsOk ? 'ok' : 'error'
