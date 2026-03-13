@@ -13,7 +13,7 @@ import { DateFilterProvider } from '../context/DateFilterContext';
 import { useApp } from '../context/AppContext';
 import { useUnifiedFilter } from '../hooks/useUnifiedFilter';
 import { SchoolData } from '../types';
-import { getProvinceStatistics } from '../utils/schoolLocationUtils';
+import { getProvinceStatisticsFromData } from '../utils/schoolLocationUtils';
 
 // ✅ DateRange now comes from filterUtils via useUnifiedFilter
 
@@ -232,8 +232,9 @@ export function Overview() {
     return <LoadingSkeleton />;
   }
 
-  // Get province statistics for display
-  const provinceStats = getProvinceStatistics();
+  // 🔥 DYNAMIC: Compute province stats dari actual data (NOT hardcoded!)
+  const allSchools = data?.all ?? [];
+  const provinceStats = getProvinceStatisticsFromData(allSchools);
   const topProvince = provinceStats?.[0];
 
   // Tambilk last updated time dengan safety check

@@ -299,7 +299,39 @@ export function getSchoolsGroupedByProvince(): Record<string, SchoolLocation[]> 
 }
 
 /**
- * Get school statistics by province
+ * Get school statistics by province - DYNAMIC version using actual school data
+ * @param schools - Array of actual school data from Google Sheets
+ * @returns Object with province names, school counts, and codes (sorted by count DESC)
+ */
+export function getProvinceStatisticsFromData(schools: any[]): Array<{
+  province: string;
+  code: string;
+  count: number;
+}> {
+  const grouped: Record<string, number> = {};
+
+  // Group schools by province (direktorat)
+  schools.forEach((school) => {
+    const province = school.direktorat || 'Unknown';
+    grouped[province] = (grouped[province] || 0) + 1;
+  });
+
+  // Convert to array and sort by count descending
+  const stats: Array<{
+    province: string;
+    code: string;
+    count: number;
+  }> = Object.entries(grouped).map(([province, count]) => ({
+    province,
+    code: getProvinceCode(province),
+    count,
+  }));
+
+  return stats.sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Get school statistics by province (LEGACY - uses hardcoded data)
  * @returns Object with province names, school counts, and codes
  */
 export function getProvinceStatistics(): Array<{
