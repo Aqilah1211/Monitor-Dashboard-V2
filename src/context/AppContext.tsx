@@ -87,24 +87,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [storedSid, storedSheets]);
 
   const saveConfig = useCallback((newConfig: Partial<SheetConfig>) => {
-    const isSpreadsheetIdChanged = newConfig.spreadsheetId && newConfig.spreadsheetId !== state.config.spreadsheetId;
+    const oldSid = state.config.spreadsheetId;
+    const newSid = newConfig.spreadsheetId;
+    const isSpreadsheetIdChanged = newSid && newSid !== oldSid && oldSid !== '';
+    
+    console.log('💾 Saving config:', { oldSid, newSid, isChanged: isSpreadsheetIdChanged });
     
     if (newConfig.spreadsheetId !== undefined) setStoredSid(newConfig.spreadsheetId);
     if (newConfig.sheetList !== undefined) setStoredSheets(newConfig.sheetList.join(','));
+    
+    // 🔥 AGGRESSIVE CACHE CLEARING: Clear ALL cache immediately
+    console.log('🗑️  Clearing ALL cache keys...');
+    try {
+      // Clear all known cache keys
+      localStorage.removeItem('ifp_app_cache');
+      localStorage.removeItem('ifp_cache_timestamp');
+      localStorage.removeItem('ifp_data_cache');
+      localStorage.removeItem('ifp_filters');
+      localStorage.removeItem('ifp_last_updated');
+      
+      // Also clear sessionStorage
+      sessionStorage.clear();
+      
+      console.log('✅ All cache cleared successfully');
+    } catch (err) {
+      console.error('⚠️  Error clearing cache:', err);
+    }
+    
+    // Dispatch config update
     dispatch({ type: 'SET_CONFIG', payload: newConfig });
     
-    // 🔥 FIX: Clear cache ketika spreadsheet ID berubah
+    // 🔥 Reset all state when spreadsheet ID changes
     if (isSpreadsheetIdChanged) {
-      console.log('🗑️  Clearing cache - Spreadsheet ID changed');
-      clearCache();
-      // Reset data & error
+      console.log('🔄 Spreadsheet ID changed - Resetting state completely');
       dispatch({ type: 'SET_DATA', payload: null });
       dispatch({ type: 'SET_ERROR', payload: null });
+      dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'UPDATE_FILTERS', payload: { search: '', dateStart: null, dateEnd: null } });
     }
     
     console.log('✅ Config saved:', newConfig);
-  }, [setStoredSid, setStoredSheets, state.config.spreadsheetId, clearCache]);
+  }, [setStoredSid, setStoredSheets, state.config.spreadsheetId]);
 
   const fetchData = useCallback(async () => {
     const { spreadsheetId, currentSheet } = state.config;
@@ -221,6 +244,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_LAST_UPDATED', payload: new Date() });
     }
   }, [loadConfig, getCachedData]);
+
+  // 🔥 AUTO-FETCH when config changes (new spreadsheet ID or sheet name)
+  useEffect(() => {
+    const { spreadsheetId, currentSheet } = state.config;
+    
+    if (spreadsheetId && currentSheet && !state.data) {
+      console.log('🚀 Auto-fetching data after config change:', { spreadsheetId, currentSheet });
+      fetchData();
+    }
+  }, [state.config.spreadsheetId, state.config.currentSheet, state.data, fetchData]);
 
   const value: AppContextType = {
     ...state,

@@ -65,7 +65,7 @@ export function Overview() {
 
       return () => clearTimeout(timeout);
     }
-  }, []);
+  }, [config.spreadsheetId, config.currentSheet, fetchData]); // 🔥 Add dependencies!
 
   // Handle manual refresh
   const handleRefresh = () => {
