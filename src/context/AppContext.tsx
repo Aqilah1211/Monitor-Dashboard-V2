@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, ReactNode, useCallback, useEffect } from 'react';
+import { createContext, useContext, useReducer, ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useGoogleSheets } from '../hooks/useGoogleSheets';
 import { useDataCache } from '../hooks/useDataCache';
@@ -86,53 +86,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [storedSid, storedSheets]);
 
-  const saveConfig = useCallback((newConfig: Partial<SheetConfig>) => {
-    const oldSid = state.config.spreadsheetId;
-    const newSid = newConfig.spreadsheetId;
-    const isSpreadsheetIdChanged = newSid && newSid !== oldSid && oldSid !== '';
-    
-    console.log('💾 Saving config:', { oldSid, newSid, isChanged: isSpreadsheetIdChanged });
-    
-    if (newConfig.spreadsheetId !== undefined) setStoredSid(newConfig.spreadsheetId);
-    if (newConfig.sheetList !== undefined) setStoredSheets(newConfig.sheetList.join(','));
-    
-    // 🔥 AGGRESSIVE CACHE CLEARING: Clear ALL cache immediately
-    console.log('🗑️  Clearing ALL cache keys...');
-    try {
-      // Clear all known cache keys
-      localStorage.removeItem('ifp_app_cache');
-      localStorage.removeItem('ifp_cache_timestamp');
-      localStorage.removeItem('ifp_data_cache');
-      localStorage.removeItem('ifp_filters');
-      localStorage.removeItem('ifp_last_updated');
-      
-      // Also clear sessionStorage
-      sessionStorage.clear();
-      
-      console.log('✅ All cache cleared successfully');
-    } catch (err) {
-      console.error('⚠️  Error clearing cache:', err);
-    }
-    
-    // Dispatch config update
-    dispatch({ type: 'SET_CONFIG', payload: newConfig });
-    
-    // 🔥 Reset all state when spreadsheet ID changes
-    if (isSpreadsheetIdChanged) {
-      console.log('🔄 Spreadsheet ID changed - Resetting state completely');
-      dispatch({ type: 'SET_DATA', payload: null });
-      dispatch({ type: 'SET_ERROR', payload: null });
-      dispatch({ type: 'SET_LOADING', payload: true });
-      dispatch({ type: 'UPDATE_FILTERS', payload: { search: '', dateStart: null, dateEnd: null } });
-    }
-    
-    console.log('✅ Config saved:', newConfig);
-  }, [setStoredSid, setStoredSheets, state.config.spreadsheetId]);
-
-  const fetchData = useCallback(async () => {
+  // 🔥 DECLARE FETCHDATA FIRST (needed by saveConfig)
+  const fetchData = useCallback(async (forceRefresh = false) => {
     const { spreadsheetId, currentSheet } = state.config;
     
-    console.log('🚀 Start fetchData:', { spreadsheetId, currentSheet });
+    console.log('🚀 Start fetchData:', { spreadsheetId, currentSheet, forceRefresh });
     
     if (!spreadsheetId || !currentSheet) {
       const msg = 'Sheet ID atau nama sheet belum diatur';
@@ -141,23 +99,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // ✅ SMART CACHING: Check cache first
-    const cachedData = getCachedData();
-    const fresh = isCacheFresh();
+    // 🔥 FIX: Kalau forceRefresh=true (spreadsheet ID berubah), SKIP cache completely
+    let cachedData = null;
+    let fresh = false;
     
-    if (cachedData && fresh) {
-      console.log('⚡ Using FRESH cache (age < 1 min)');
-      dispatch({ type: 'SET_DATA', payload: cachedData });
-      dispatch({ type: 'SET_LAST_UPDATED', payload: new Date() });
-      return; // Tidak perlu fetch, cache masih fresh
+    if (!forceRefresh) {
+      // ✅ SMART CACHING: Check cache only jika tidak forced refresh
+      cachedData = getCachedData();
+      fresh = isCacheFresh();
+      
+      if (cachedData && fresh) {
+        console.log('⚡ Using FRESH cache (age < 1 min)');
+        dispatch({ type: 'SET_DATA', payload: cachedData });
+        dispatch({ type: 'SET_LAST_UPDATED', payload: new Date() });
+        return; // Tidak perlu fetch, cache masih fresh
+      }
+
+      if (cachedData && !fresh) {
+        console.log('📦 Using STALE cache (age > 1 min) - fetching fresh data in background');
+        // Load stale data immediately, fetch baru di background
+        dispatch({ type: 'SET_DATA', payload: cachedData });
+        dispatch({ type: 'SET_LOADING', payload: true });
+      }
+    } else {
+      console.log('🔄 Force refresh: BYPASSING all cache');
+      dispatch({ type: 'SET_LOADING', payload: true });
     }
 
-    if (cachedData && !fresh) {
-      console.log('📦 Using STALE cache (age > 1 min) - fetching fresh data in background');
-      // Load stale data immediately, fetch baru di background
-      dispatch({ type: 'SET_DATA', payload: cachedData });
-      dispatch({ type: 'SET_LOADING', payload: true });
-    } else {
+    if (!forceRefresh && !cachedData) {
       console.log('❌ No cache - setting loading...');
       dispatch({ type: 'SET_LOADING', payload: true });
     }
@@ -215,6 +184,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [state.config, fetchSheetData, getCachedData, setCachedData, isCacheFresh]);
 
+  // NOW define saveConfig (uses fetchData)
+  const saveConfig = useCallback((newConfig: Partial<SheetConfig>) => {
+    const oldSid = state.config.spreadsheetId;
+    const newSid = newConfig.spreadsheetId;
+    const isSpreadsheetIdChanged = newSid && newSid !== oldSid && oldSid !== '';
+    
+    console.log('💾 Saving config:', { oldSid, newSid, isChanged: isSpreadsheetIdChanged });
+    
+    if (newConfig.spreadsheetId !== undefined) setStoredSid(newConfig.spreadsheetId);
+    if (newConfig.sheetList !== undefined) setStoredSheets(newConfig.sheetList.join(','));
+    
+    // 🔥 AGGRESSIVE CACHE CLEARING: Clear ALL cache immediately
+    console.log('🗑️  Clearing ALL cache keys...');
+    try {
+      // Clear all known cache keys
+      localStorage.removeItem('ifp_app_cache');
+      localStorage.removeItem('ifp_cache_timestamp');
+      localStorage.removeItem('ifp_data_cache');
+      localStorage.removeItem('ifp_filters');
+      localStorage.removeItem('ifp_last_updated');
+      
+      // Also clear sessionStorage
+      sessionStorage.clear();
+      
+      console.log('✅ All cache cleared successfully');
+    } catch (err) {
+      console.error('⚠️  Error clearing cache:', err);
+    }
+    
+    // Dispatch config update
+    dispatch({ type: 'SET_CONFIG', payload: newConfig });
+    
+    // 🔥 Reset all state when spreadsheet ID changes
+    if (isSpreadsheetIdChanged) {
+      console.log('🔄 Spreadsheet ID changed - Resetting state completely');
+      dispatch({ type: 'SET_DATA', payload: null });
+      dispatch({ type: 'SET_ERROR', payload: null });
+      dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'UPDATE_FILTERS', payload: { search: '', dateStart: null, dateEnd: null } });
+      
+      // 🔥 IMMEDIATE FETCH with forceRefresh=true to bypass cache
+      console.log('🚀 Force refreshing data from new spreadsheet...');
+      setTimeout(() => {
+        fetchData(true); // Force refresh, bypass all cache!
+      }, 100);
+    }
+    
+    console.log('✅ Config saved:', newConfig);
+  }, [setStoredSid, setStoredSheets, state.config.spreadsheetId, fetchData]);
+
   const changeSheet = useCallback((sheetName: string) => {
     dispatch({ type: 'SET_CONFIG', payload: { currentSheet: sheetName } });
     dispatch({ type: 'ADD_LOG', payload: { message: `Pindah ke sheet: ${sheetName}`, type: 'info' } });
@@ -246,12 +265,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadConfig, getCachedData]);
 
   // 🔥 AUTO-FETCH when config changes (new spreadsheet ID or sheet name)
+  // Track previous ID to detect when it actually changed
+  const prevSidRef = useRef<string>(state.config.spreadsheetId);
+  
   useEffect(() => {
     const { spreadsheetId, currentSheet } = state.config;
+    const prevSid = prevSidRef.current;
+    const sidChanged: boolean = !!(spreadsheetId && spreadsheetId !== prevSid);
+    
+    // Update ref
+    prevSidRef.current = spreadsheetId;
     
     if (spreadsheetId && currentSheet && !state.data) {
-      console.log('🚀 Auto-fetching data after config change:', { spreadsheetId, currentSheet });
-      fetchData();
+      console.log('🚀 Auto-fetching data after config change:', { spreadsheetId, currentSheet, sidChanged });
+      
+      // Force refresh if spreadsheet ID actually changed
+      fetchData(sidChanged);
     }
   }, [state.config.spreadsheetId, state.config.currentSheet, state.data, fetchData]);
 
