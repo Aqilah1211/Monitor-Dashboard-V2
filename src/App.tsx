@@ -28,11 +28,46 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/overview" replace />} />
-      <Route path="/overview" element={<Overview />} />
-      <Route path="/trouble" element={<Troubles />} />
-      <Route path="/installed" element={<Installed />} />
-      <Route path="/pending" element={<Pending />} />
-      <Route path="/settings" element={<Settings />} />
+      <Route 
+        path="/overview" 
+        element={
+          <ErrorBoundary fallback={<div className="p-4 text-red-600">Error loading Overview page</div>}>
+            <Overview />
+          </ErrorBoundary>
+        } 
+      />
+      <Route 
+        path="/trouble" 
+        element={
+          <ErrorBoundary fallback={<div className="p-4 text-red-600">Error loading Troubles page</div>}>
+            <Troubles />
+          </ErrorBoundary>
+        } 
+      />
+      <Route 
+        path="/installed" 
+        element={
+          <ErrorBoundary fallback={<div className="p-4 text-red-600">Error loading Installed page</div>}>
+            <Installed />
+          </ErrorBoundary>
+        } 
+      />
+      <Route 
+        path="/pending" 
+        element={
+          <ErrorBoundary fallback={<div className="p-4 text-red-600">Error loading Pending page</div>}>
+            <Pending />
+          </ErrorBoundary>
+        } 
+      />
+      <Route 
+        path="/settings" 
+        element={
+          <ErrorBoundary fallback={<div className="p-4 text-red-600">Error loading Settings page</div>}>
+            <Settings />
+          </ErrorBoundary>
+        } 
+      />
       <Route path="*" element={<Navigate to="/overview" replace />} />
     </Routes>
   );

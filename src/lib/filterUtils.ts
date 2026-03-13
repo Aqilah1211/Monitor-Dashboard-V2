@@ -250,3 +250,83 @@ export const DEFAULT_FILTER_STATE: FilterState = {
   status: [],
   searchText: ''
 };
+
+/**
+ * Validate that a value is a valid Date object
+ */
+function isValidDate(date: any): boolean {
+  return date instanceof Date && !isNaN(date.getTime());
+}
+
+/**
+ * Safely convert string to Date if needed
+ */
+function toDate(value: any): Date | null {
+  if (isValidDate(value)) {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return isValidDate(parsed) ? parsed : null;
+  }
+  
+  return null;
+}
+
+/**
+ * Deserialize filter state from localStorage (convert date strings to Date objects)
+ * ✅ Includes validation and error handling
+ */
+export function deserializeFilterState(data: any): FilterState {
+  if (!data || typeof data !== 'object') return DEFAULT_FILTER_STATE;
+
+  try {
+    const state: Partial<FilterState> = {};
+
+    // Safely deserialize dateRange
+    if (data.dateRange && typeof data.dateRange === 'object') {
+      const start = toDate(data.dateRange.start);
+      const end = toDate(data.dateRange.end);
+
+      // Validate dates are valid and in correct order
+      if (start && end) {
+        if (start <= end) {
+          state.dateRange = { start, end };
+        } else {
+          // If dates are reversed, swap them
+          state.dateRange = { start: end, end: start };
+          console.warn('[Deserialization] Date range was reversed, auto-corrected');
+        }
+      } else if (start || end) {
+        console.warn('[Deserialization] One date is invalid, discarding dateRange');
+      }
+    }
+
+    // Safely deserialize provinces array
+    if (Array.isArray(data.provinces)) {
+      state.provinces = data.provinces.filter((p: any) => typeof p === 'string' && p.length > 0);
+    }
+
+    // Safely deserialize status array
+    if (Array.isArray(data.status)) {
+      state.status = data.status.filter((s: any) => typeof s === 'string' && s.length > 0);
+    }
+
+    // Safely deserialize searchText
+    if (typeof data.searchText === 'string') {
+      state.searchText = data.searchText;
+    }
+
+    // Return merged state with defaults for missing fields
+    return {
+      dateRange: state.dateRange || null,
+      provinces: state.provinces || [],
+      status: state.status || [],
+      searchText: state.searchText || ''
+    };
+  } catch (error) {
+    console.error('[Deserialization] Error deserializing filter state:', error);
+    return DEFAULT_FILTER_STATE;
+  }
+}

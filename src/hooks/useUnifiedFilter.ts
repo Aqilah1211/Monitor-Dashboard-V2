@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { FilterState, DateRange, DEFAULT_FILTER_STATE, isFilterActive, normalizeFilterState } from '../lib/filterUtils';
+import { FilterState, DateRange, DEFAULT_FILTER_STATE, isFilterActive, normalizeFilterState, deserializeFilterState } from '../lib/filterUtils';
 import { logger } from '../utils/logger';
 
 interface UseUnifiedFilterOptions {
@@ -26,8 +26,9 @@ export function useUnifiedFilter(options: UseUnifiedFilterOptions = {}) {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const parsed = JSON.parse(stored);
-        logger.debug('Loaded filter state from localStorage', { parsed }, 'useUnifiedFilter');
-        return parsed;
+        const deserialized = deserializeFilterState(parsed);
+        logger.debug('Loaded filter state from localStorage', { deserialized }, 'useUnifiedFilter');
+        return deserialized;
       }
     } catch (err) {
       logger.warn('Failed to load filter state from localStorage', { error: err }, 'useUnifiedFilter');

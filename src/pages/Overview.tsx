@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { RefreshCw } from 'lucide-react';
 import { ProgressChart } from '../components/dashboard/ProgressChart';
@@ -11,13 +11,11 @@ import {
 } from '../components';
 import { DateFilterProvider } from '../context/DateFilterContext';
 import { useApp } from '../context/AppContext';
+import { useUnifiedFilter } from '../hooks/useUnifiedFilter';
 import { SchoolData } from '../types';
 import { getProvinceStatistics } from '../utils/schoolLocationUtils';
 
-interface DateRange {
-  startDate: Date;
-  endDate: Date;
-}
+// ✅ DateRange now comes from filterUtils via useUnifiedFilter
 
 interface FilteredStats {
   total: number;
@@ -34,6 +32,7 @@ interface DashboardState {
 
 export function Overview() {
   const { data, config, fetchData, isLoading } = useApp();
+  const filter = useUnifiedFilter(); // ✅ Use unified filter instead of legacy states
 
   // Dashboard state management
   const [dashboardState, setDashboardState] = useState<DashboardState>({
@@ -41,22 +40,6 @@ export function Overview() {
     lastUpdated: null,
     error: null,
   });
-
-  // Filter states - Legacy states (kept for backward compatibility)
-  // Note: UnifiedFilter manages filters independently via its own hook
-  const [dateRange] = useState<DateRange>({
-    startDate: new Date(),
-    endDate: new Date(),
-  });
-  const [selectedProvince] = useState('Semua Provinsi');
-  const [filteredData, setFilteredData] = useState<SchoolData[]>([]);
-  const [filteredStats, setFilteredStats] = useState<FilteredStats>({
-    total: 0,
-    installed: 0,
-    pending: 0,
-    trouble: 0,
-  });
-  const [isFilterActive, setIsFilterActive] = useState(false);
 
   // Auto-fetch data on mount with simulation
   useEffect(() => {
@@ -106,24 +89,25 @@ export function Overview() {
     return () => clearTimeout(timeout);
   };
 
-  // Filter logic - apply both date range and province filters
-  useEffect(() => {
-    if (!data) {
-      setFilteredData([]);
-      setFilteredStats({ total: 0, installed: 0, pending: 0, trouble: 0 });
-      return;
+  // ✅ Compute filtered data based on unified filter state
+  const { filteredData, filteredStats, isFilterActive } = useMemo(() => {
+    if (!data || !data.all) {
+      return {
+        filteredData: [],
+        filteredStats: { total: 0, installed: 0, pending: 0, trouble: 0 },
+        isFilterActive: false
+      };
     }
 
-    let filtered = data.all;
+    let result = data.all;
 
     // Apply date range filter
-    if (dateRange.startDate && dateRange.endDate) {
-      const startDate = startOfDay(dateRange.startDate);
-      const endDate = endOfDay(dateRange.endDate);
+    if (filter.dateRange) {
+      const startDate = startOfDay(filter.dateRange.start);
+      const endDate = endOfDay(filter.dateRange.end);
 
-      filtered = filtered.filter((item: SchoolData) => {
+      result = result.filter((item: SchoolData) => {
         try {
-          // Parse tanggal dari format yang ada di data
           const itemDate = parseISO(item.tanggal);
           return isWithinInterval(itemDate, { start: startDate, end: endDate });
         } catch {
@@ -133,47 +117,72 @@ export function Overview() {
     }
 
     // Apply province filter
-    if (selectedProvince !== 'Semua Provinsi') {
-      // Extract province dari nama sekolah dan filter
-      filtered = filtered.filter((item: SchoolData) => {
-        // Cek direktorat field (yang mungkin berisi provinsi)
-        return item.direktorat
-          .toLowerCase()
-          .includes(selectedProvince.toLowerCase());
-      });
+    if (filter.provinces.length > 0) {
+      result = result.filter((item: SchoolData) => 
+        filter.provinces.some(province => 
+          item.direktorat.toLowerCase().includes(province.toLowerCase())
+        )
+      );
+    }
+
+    // Apply status filter
+    if (filter.status.length > 0) {
+      result = result.filter((item: SchoolData) =>
+        filter.status.some(status => {
+          const itemStatus = item.status.toLowerCase();
+          const filterStatus = status.toLowerCase();
+          return itemStatus.includes(filterStatus);
+        })
+      );
+    }
+
+    // Apply search filter
+    if (filter.searchText) {
+      const searchLower = filter.searchText.toLowerCase();
+      result = result.filter((item: SchoolData) =>
+        item.npsn.toLowerCase().includes(searchLower) ||
+        item.nama.toLowerCase().includes(searchLower) ||
+        item.direktorat.toLowerCase().includes(searchLower)
+      );
     }
 
     // Calculate filtered statistics
     const stats: FilteredStats = {
-      total: filtered.length,
-      installed: filtered.filter((item: SchoolData) =>
+      total: result.length,
+      installed: result.filter((item: SchoolData) =>
         item.status.toLowerCase().includes('selesai')
       ).length,
-      pending: filtered.filter(
-        (item: SchoolData) => !item.status.toLowerCase().includes('selesai')
+      pending: result.filter((item: SchoolData) =>
+        !item.status.toLowerCase().includes('selesai') &&
+        (!item.kendala || item.kendala.trim().length === 0)
       ).length,
-      trouble: filtered.filter((item: SchoolData) => item.kendala.length > 2)
-        .length,
+      trouble: result.filter((item: SchoolData) =>
+        item.kendala && item.kendala.trim().length > 0
+      ).length,
     };
 
-    setFilteredData(filtered);
-    setFilteredStats(stats);
+    // Check if filter is active (any filter applied)
+    const isActive =
+      filter.dateRange !== null ||
+      filter.provinces.length > 0 ||
+      filter.status.length > 0 ||
+      filter.searchText.length > 0;
 
-    // Check if filter is active
-    const filterActive =
-      selectedProvince !== 'Semua Provinsi' ||
-      (dateRange.startDate &&
-        dateRange.endDate &&
-        format(dateRange.startDate, 'yyyy-MM-dd') !==
-          format(new Date(), 'yyyy-MM-dd'));
-    setIsFilterActive(filterActive);
-
-    console.log('✅ Filters applied:', {
-      dateRange,
-      province: selectedProvince,
-      resultCount: filtered.length,
+    console.log('✅ Filtered data updated:', {
+      dateRange: filter.dateRange,
+      provinces: filter.provinces,
+      status: filter.status,
+      searchText: filter.searchText,
+      resultCount: result.length,
+      stats
     });
-  }, [data, dateRange, selectedProvince]);
+
+    return {
+      filteredData: result,
+      filteredStats: stats,
+      isFilterActive: isActive
+    };
+  }, [data, filter.dateRange, filter.provinces, filter.status, filter.searchText]);
 
   // Handle province selection from chart
   const handleProvinceSelect = (_province: string) => {
@@ -185,16 +194,25 @@ export function Overview() {
     }
   };
 
+  // ✅ Safe data access helpers (declared early for use in computations)
+  const totalSchools = data?.all?.length ?? 0;
+  const allSchoolsData = data?.all ?? [];
+
   // Mock data untuk testing DateSummaryStats
   // Format: { id, name, date, status }
-  const mockSummaryData = data?.all?.map((item: SchoolData) => {
+  // ✅ Safe access with null checks
+  const mockSummaryData = (allSchoolsData)?.map((item: SchoolData) => {
     let status: 'terpasang' | 'pending' | 'problem' | 'proses' = 'pending';
     
-    if (item.status.toLowerCase().includes('selesai')) {
+    const itemStatus = item.status?.toLowerCase().trim() || '';
+    const itemKendala = item.kendala?.trim() || '';
+
+    if (itemStatus.includes('selesai')) {
       status = 'terpasang';
-    } else if (item.kendala && item.kendala.length > 2) {
+    } else if (itemKendala.length > 0) {
+      // ✅ Fixed: any non-empty kendala = problem, not > 2 chars
       status = 'problem';
-    } else if (item.status.toLowerCase().includes('proses')) {
+    } else if (itemStatus.includes('proses')) {
       status = 'proses';
     }
 
@@ -206,27 +224,19 @@ export function Overview() {
     };
   }) || [];
 
-  // Debug: Log tanggal setiap kali date filter berubah
-  useEffect(() => {
-    console.log('📅 Date Filter Changed:', {
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate,
-      selectedProvince,
-      filteredCount: filteredData.length,
-      timestamp: new Date().toLocaleTimeString('id-ID'),
-    });
-  }, [dateRange, selectedProvince]);
+  // Remove this useEffect - no longer needed with unified filter
+  // (Previously logged when legacy dateRange and selectedProvince changed)
 
   // Tampilkan loading skeleton saat data sedang di-fetch atau state loading aktif
   if (isLoading || dashboardState.loading || !data) {
     return <LoadingSkeleton />;
   }
 
-  // Ambil jumlah provinsi untuk display
+  // Get province statistics for display
   const provinceStats = getProvinceStatistics();
-  const topProvince = provinceStats[0];
+  const topProvince = provinceStats?.[0];
 
-  // Format last updated time
+  // Tambilk last updated time dengan safety check
   const lastUpdatedTime = dashboardState.lastUpdated
     ? format(dashboardState.lastUpdated, 'HH:mm:ss')
     : 'Tidak ada data';
@@ -247,7 +257,7 @@ export function Overview() {
             <h1 className="text-3xl font-bold text-slate-900">📊 Dashboard</h1>
             <div className="space-y-1 mt-2">
               <p className="text-slate-600 text-sm">
-                Total {data.all.length} sekolah dipantau
+                Total {totalSchools} sekolah dipantau
               </p>
               <p className="text-xs text-slate-500">
                 ⏱️ Terakhir diperbarui:{' '}
@@ -285,7 +295,7 @@ export function Overview() {
             <p className="text-sm text-amber-800">
               📊 Menampilkan{' '}
               <span className="font-bold">{filteredData.length}</span> dari{' '}
-              <span className="font-bold">{data.all.length}</span> sekolah
+              <span className="font-bold">{totalSchools}</span> sekolah
             </p>
           </div>
         )}
@@ -295,8 +305,8 @@ export function Overview() {
         <div data-section="statistics">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">
             Statistik{' '}
-            {selectedProvince !== 'Semua Provinsi'
-              ? `- ${selectedProvince}`
+            {filter.provinces.length > 0
+              ? `- ${filter.provinces.join(', ')}`
               : ''}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -313,7 +323,7 @@ export function Overview() {
                 {filteredStats.total}
               </p>
               <p className="text-xs text-slate-500 mt-2">
-                {((filteredStats.total / data.all.length) * 100).toFixed(1)}%
+                {totalSchools > 0 ? ((filteredStats.total / totalSchools) * 100).toFixed(1) : '0'}%
                 dari total
               </p>
             </div>

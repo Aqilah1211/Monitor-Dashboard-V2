@@ -1,5 +1,5 @@
-import { DataTable } from '../components/tables/DataTable';
+import { SchoolTableWithFilters } from '../components/tables/SchoolTableWithFilters';
 
 export function Pending() {
-  return <DataTable type="pending" />;
+  return <SchoolTableWithFilters type="pending" />;
 }

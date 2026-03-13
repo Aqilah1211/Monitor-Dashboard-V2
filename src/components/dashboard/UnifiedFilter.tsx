@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Search, RotateCcw, Sliders } from 'lucide-react';
 import { useUnifiedFilter } from '../../hooks/useUnifiedFilter';
+import { useDebounce } from '../../hooks/useDebounce';
 import DateRangePicker from '../filters/DateRangePicker';
 import ProvinceMultiSelect from '../filters/ProvinceMultiSelect';
 import StatusSelector from '../filters/StatusSelector';
@@ -21,8 +22,34 @@ import { logger } from '../../utils/logger';
 
 export const UnifiedFilter: React.FC = () => {
   const filter = useUnifiedFilter();
+  const [searchInput, setSearchInput] = useState(filter.getNormalizedState().searchText);
   const filterCount = filter.getDetailedFilterCount();
   const hasActiveFilters = filter.hasActiveFilters();
+
+  /**
+   * ✅ Debounced search handler - prevents excessive re-renders
+   * Only calls setSearchText after 300ms of inactivity
+   */
+  const debouncedSearch = useDebounce(
+    useCallback((value: string) => {
+      try {
+        filter.setSearchText(value);
+        logger.debug('UnifiedFilter: Debounced search applied', { searchText: value });
+      } catch (error) {
+        logger.error('UnifiedFilter: Failed to update search text', { error });
+      }
+    }, [filter]),
+    300 // 300ms debounce delay
+  );
+
+  /**
+   * Handle search input change - updates local state immediately for responsive UI
+   * Actual filter application is debounced
+   */
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value); // Immediate UI update
+    debouncedSearch(value); // Debounced filter update
+  };
 
   /**
    * Get display names for selected items
@@ -43,18 +70,6 @@ export const UnifiedFilter: React.FC = () => {
     if (statuses.length === 1) return getStatusLabel(statuses[0]);
     return `${getStatusLabel(statuses[0])} + ${statuses.length - 1} lainnya`;
   }, [filterCount.status]);
-
-  /**
-   * Handle search input
-   */
-  const handleSearchChange = (value: string) => {
-    try {
-      filter.setSearchText(value);
-      logger.debug('UnifiedFilter: Search text updated', { searchText: value });
-    } catch (error) {
-      logger.error('UnifiedFilter: Failed to update search text', { error });
-    }
-  };
 
   /**
    * Handle reset all filters
@@ -108,11 +123,14 @@ export const UnifiedFilter: React.FC = () => {
             <input
               type="text"
               placeholder="Cari berdasarkan nama, lokasi, atau keterangan..."
-              value={filter.getNormalizedState().searchText}
+              value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 transition-all"
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            ✨ Pencarian akan diterapkan setelah 300ms (untuk performa lebih baik)
+          </p>
         </div>
 
         {/* Filter Grid */}

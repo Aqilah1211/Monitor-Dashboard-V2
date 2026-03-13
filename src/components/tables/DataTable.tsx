@@ -1,15 +1,18 @@
 import { memo, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SchoolData } from '../../types';
+import { usePagination } from '../../hooks/usePagination';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
+import PaginationControls from '../ui/PaginationControls';
 import EmptyState from '../ui/EmptyState';
 import { AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 
 interface DataTableProps {
   type: 'trouble' | 'installed' | 'pending';
+  preFilteredData?: SchoolData[];
 }
 
-export const DataTable = memo(function DataTable({ type }: DataTableProps) {
+export const DataTable = memo(function DataTable({ type, preFilteredData }: DataTableProps) {
   const { data, filters } = useApp();
 
   const dataSource = useMemo(() => {
@@ -17,7 +20,13 @@ export const DataTable = memo(function DataTable({ type }: DataTableProps) {
     return data[type] || [];
   }, [data, type]);
 
+  // If preFilteredData is provided (from SchoolTableWithFilters), use it
+  // Otherwise, do own filtering like before
   const filteredData = useMemo(() => {
+    if (preFilteredData) {
+      return preFilteredData;
+    }
+    
     return dataSource.filter((item: SchoolData) => {
       if (filters.search) {
         const search = filters.search.toLowerCase();
@@ -25,7 +34,10 @@ export const DataTable = memo(function DataTable({ type }: DataTableProps) {
       }
       return true;
     });
-  }, [dataSource, filters.search]);
+  }, [preFilteredData, dataSource, filters.search]);
+
+  // ✅ Add pagination with 50 items per page
+  const pagination = usePagination(filteredData, 50);
 
   const titles: Record<typeof type, string> = {
     trouble: 'Daftar Kendala',
@@ -96,10 +108,12 @@ export const DataTable = memo(function DataTable({ type }: DataTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 text-sm">
-            {filteredData.length > 0 ? (
-              filteredData.map((item: SchoolData, index: number) => (
+            {pagination.data.length > 0 ? (
+              pagination.data.map((item: SchoolData, index: number) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-all">
-                  <td className="px-6 py-4 text-center font-bold text-slate-300">{index + 1}</td>
+                  <td className="px-6 py-4 text-center font-bold text-slate-300">
+                    {(pagination.currentPage - 1) * pagination.pageSize + index + 1}
+                  </td>
                   <td className="px-6 py-4 font-mono text-blue-600 font-bold">{item.npsn}</td>
                   <td className="px-6 py-4 font-semibold text-slate-700">{item.nama}</td>
                   <td className="px-6 py-4">
@@ -131,6 +145,20 @@ export const DataTable = memo(function DataTable({ type }: DataTableProps) {
           </tbody>
         </table>
       </div>
+      
+      {/* ✅ Add pagination controls if we have more than one page */}
+      {pagination.totalPages > 1 && (
+        <PaginationControls
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+          hasNextPage={pagination.hasNextPage}
+          hasPreviousPage={pagination.hasPreviousPage}
+          onPageChange={pagination.goToPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
+      )}
     </Card>
   );
 });

@@ -81,7 +81,20 @@ export function Settings() {
       logger.info(`🧪 Starting diagnostics test`, { spreadsheetId: cleanedSid, sheet: sheetList[0] }, 'Settings');
 
       // Run diagnostic check
-      const diagnosticResult = await diagnosticCheckSpreadsheet(cleanedSid, sheetList[0]);
+      let diagnosticResult = await diagnosticCheckSpreadsheet(cleanedSid, sheetList[0]);
+      
+      // 🔥 SMART FALLBACK: Kalau gagal dengan sheet name input, auto-try dengan "Sheet1"
+      if (diagnosticResult.errors.length > 0 && sheetList[0] !== 'Sheet1') {
+        console.log(`⚠️  Test gagal dengan sheet "${sheetList[0]}", mencoba default "Sheet1"...`);
+        diagnosticResult = await diagnosticCheckSpreadsheet(cleanedSid, 'Sheet1');
+        
+        if (diagnosticResult.accessible && !diagnosticResult.errors.length) {
+          // SUCCESS dengan Sheet1 fallback
+          setSheets('Sheet1');
+          console.log('✅ Auto-detected: Sheet1 is the correct sheet name');
+        }
+      }
+
       const report = generateDiagnosticsReport(diagnosticResult);
       
       logger.debug('Diagnostics report generated', { diagnosticResult, report }, 'Settings');
@@ -103,10 +116,13 @@ export function Settings() {
       } else if (diagnosticResult.accessible && diagnosticResult.hasData) {
         setTestResult({
           status: 'success',
-          message: `✅ Spreadsheet berhasil diakses!\n📊 Data ditemukan: ${diagnosticResult.rowCount} baris, ${diagnosticResult.columnCount} kolom.`,
+          message: `✅ Spreadsheet berhasil diakses!\n📊 Data ditemukan: ${diagnosticResult.rowCount} baris, ${diagnosticResult.columnCount} kolom.\n\n💡 Sheet name sudah auto-detect: "${sheetList[0]}"`,
         });
-        logger.info(`✅ Spreadsheet test successful`, { rowCount: diagnosticResult.rowCount, columnCount: diagnosticResult.columnCount }, 'Settings');
-        addLog(`✅ Spreadsheet ${cleanedSid.substring(0, 8)}... berhasil diuji`, 'success');
+        // 🔥 AUTO-POPULATE: Auto-detect sheet name yg berhasil
+        // Jadi user tidak perlu input manual & terhindar typo
+        setSheets(sheetList[0]);
+        logger.info(`✅ Spreadsheet test successful - Auto-detected sheet name`, { rowCount: diagnosticResult.rowCount, columnCount: diagnosticResult.columnCount, sheetName: sheetList[0] }, 'Settings');
+        addLog(`✅ Spreadsheet ${cleanedSid.substring(0, 8)}... berhasil diuji (Sheet: ${sheetList[0]})`, 'success');
       } else if (diagnosticResult.accessible && !diagnosticResult.hasData) {
         setTestResult({
           status: 'error',
@@ -127,53 +143,86 @@ export function Settings() {
   };
 
   /**
-   * Handle Save dengan validasi
+   * Handle Save dengan WAJIB test koneksi dulu
+   * 🔥 FIX: Harus test berhasil sebelum boleh save!
    */
   const handleSave = async () => {
-    if (!sid || !sheets) {
+    // WAJIB: Test koneksi harus berhasil dulu
+    if (testResult.status !== 'success') {
       setTestResult({
         status: 'error',
-        message: '❌ Data tidak boleh kosong!',
+        message: '❌ WAJIB klik "Tes Koneksi" dan BERHASIL sebelum boleh Simpan! Ini untuk mencegah error 404 terus-menerus.',
       });
-      logger.warn('Save failed: empty fields', {}, 'Settings');
+      logger.warn('Save blocked: connection test must pass first', {}, 'Settings');
       return;
     }
 
-    const validation = validateSpreadsheetId(sid);
-    if (!validation.valid) {
-      setTestResult({
-        status: 'error',
-        message: validation.message,
-      });
-      logger.warn(`Save failed: invalid spreadsheet ID - ${validation.message}`, {}, 'Settings');
-      return;
-    }
-
-    // Clean up the Spreadsheet ID
     const cleanedSid = GoogleSheets.cleanSpreadsheetId(sid);
     const sheetList = sheets
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
 
-    logger.info('Saving configuration', { originalSid: sid, cleanedSid, sheetList }, 'Settings');
+    logger.info('Saving configuration after successful test', { cleanedSid, sheetList }, 'Settings');
+
+    // 🔥 Clear cache explicit ketika spreadsheet ID berubah
+    localStorage.removeItem('ifp_app_cache');
+    localStorage.removeItem('ifp_cache_timestamp');
+    localStorage.removeItem('ifp_data_cache');
+
+    // 🔥 CRITICAL FIX: Save to localStorage DIRECTLY before context update
+    // Ini memastikan localStorage write compl immediately
+    try {
+      localStorage.setItem('ifp_sid', cleanedSid);
+      localStorage.setItem('ifp_sheets', sheetList.join(','));
+      console.log('✅ Data tersimpan ke localStorage:', { cleanedSid, sheetList: sheetList.join(',') });
+    } catch (err) {
+      console.error('❌ Gagal simpan ke localStorage:', err);
+      setTestResult({
+        status: 'error',
+        message: '❌ Gagal simpan: ' + (err instanceof Error ? err.message : 'Unknown error'),
+      });
+      return;
+    }
+
+    // FINAL VERIFICATION: Double-check dengan fetch langsung sebelum reload
+    // Ini untuk memastikan spreadsheet ID yang disave benar-benar accessible
+    console.log('🔐 Final verification sebelum reload...');
+    try {
+      const verifyUrl = GoogleSheets.buildCSVUrl(cleanedSid, sheetList[0]);
+      const verifyResponse = await fetch(verifyUrl);
+      
+      if (!verifyResponse.ok) {
+        throw new Error(`HTTP ${verifyResponse.status}: ${verifyResponse.statusText}`);
+      }
+      console.log('✅ Final verification PASSED! Spreadsheet accessible');
+    } catch (verifyErr) {
+      const errMsg = verifyErr instanceof Error ? verifyErr.message : 'Unknown error';
+      console.error('❌ Final verification FAILED:', errMsg);
+      setTestResult({
+        status: 'error',
+        message: `❌ Verifikasi akhir gagal: ${errMsg}\n\nCoba ulangi "Tes Koneksi" dan pastikan spreadsheet setting sudah "Siapa saja dengan link"`,
+      });
+      return;
+    }
 
     saveConfig({ spreadsheetId: cleanedSid, sheetList, currentSheet: sheetList[0] });
-    setTestResult({
-      status: 'success',
-      message: '✅ Pengaturan disimpan. Memuat ulang...',
-    });
-    addLog('Pengaturan disimpan. Memuat ulang...', 'success');
+    addLog('✅ Pengaturan disimpan. Cache dihapus. Memuat ulang...', 'success');
 
-    // Tunggu sebentar sebelum reload biar config tersimpan
+    // Tunggu lebih lama untuk memastikan semua data tersimpan sebelum reload
+    // Juga berikan feedback bahwa sedang memproses
     setTimeout(() => {
+      console.log('🔄 Reloading page dengan config baru...');
       window.location.reload();
-    }, 1500);
+    }, 2000);
   };
 
   const handleReset = () => {
     localStorage.removeItem('ifp_sid');
     localStorage.removeItem('ifp_sheets');
+    localStorage.removeItem('ifp_app_cache');
+    localStorage.removeItem('ifp_cache_timestamp');
+    localStorage.removeItem('ifp_data_cache');
     setTestResult({ status: 'idle', message: '' });
     setSid('');
     setSheets('');

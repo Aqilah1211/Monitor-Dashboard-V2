@@ -53,6 +53,7 @@ export interface AppContextType extends AppState {
   updateFilters: (filters: Partial<FilterState>) => void;
   addLog: (message: string, type?: ActivityLog['type']) => void;
   clearLogs: () => void;
+  clearCache: () => void;
 }
 
 export type TabType = 'overview' | 'trouble' | 'installed' | 'pending' | 'settings';

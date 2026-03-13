@@ -1,5 +1,5 @@
-import { DataTable } from '../components/tables/DataTable';
+import { SchoolTableWithFilters } from '../components/tables/SchoolTableWithFilters';
 
 export function Installed() {
-  return <DataTable type="installed" />;
+  return <SchoolTableWithFilters type="installed" />;
 }
